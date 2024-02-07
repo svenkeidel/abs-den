@@ -5,89 +5,90 @@
 \section{The Problem We Solve}
 \label{sec:problem}
 
-What does it take to prove a compositional, summary-based analysis sound \wrt a
-non-compositional small-step operational semantics?
-We will recall so in this section, by way of a simplified \emph{absence
-analysis}~\citep{SPJ:94}, a higher-order form of neededness analysis to inform
-removal of dead bindings in a compiler.
-
-\subsection{Object Language}
-
-To set the stage, we start by defining the object language of this work, a
-lambda calculus with \emph{recursive} let bindings and algebraic data types:
-\[
-\arraycolsep=3pt
-\begin{array}{rrclcrrclcl}
-  \text{Variables}    & \px, \py & ∈ & \Var        &     & \quad \text{Constructors} &        K & ∈ & \Con        &     & \text{with arity $α_K ∈ ℕ$} \\
-  \text{Values}       &      \pv & ∈ & \Val        & ::= & \highlight{\Lam{\px}{\pe}} \mid K~\many{\px}^{α_K} \\
-  \text{Expressions}  &      \pe & ∈ & \Exp        & ::= & \multicolumn{6}{l}{\highlight{\px \mid \pv \mid \pe~\px \mid \Let{\px}{\pe_1}{\pe_2}} \mid \Case{\pe}{\SelArity}}
-\end{array}
-\]
-The form is reminiscent of \citet{Launchbury:93} and \citet{Sestoft:97} because
-it is factored into \emph{A-normal form}, that is, the arguments of applications
-are restricted to be variables, so the difference between lazy and eager
-semantics is manifest in the semantics of $\mathbf{let}$.
-Note that $\Lam{x}{x}$ (with an overbar) denotes syntax, whereas $\fn{x}{x+1}$
-denotes a function in math.
-In this section, only the highlighted parts are relevant, but the interpreter
-definition in \Cref{sec:interp} supports data types as well.
-From hereon throughout, we assume that all bound program variables
-are distinct.
+In this section, we illustrate the problem this paper solves by example.
+Specifically, summary-based analyses are difficult to prove sound.
+We will demonstrate this problem at the example of a simplified summary-based \emph{absence analysis}~\citep{SPJ:94}.
+An absence analysis computes which variables are never evaluated in an expression and can be used by compilers to remove dead bindings.
+If such an analysis were unsound, the compiler optimization would not preserve the program semantics and introduce hard to find bugs.
 
 \subsection{Absence Analysis}
-\label{sec:absence}
+
+The absence analysis analyzes a lambda calculus with recursive $\mathbf{let}$ bindings:
+\[
+  \arraycolsep=3pt
+  \begin{array}{rrclcrrclcl}
+    \text{Variables}    & \px, \py & ∈ & \Var        &     & \quad \text{Constructors} &        K & ∈ & \Con        &     & \text{with arity $α_K ∈ ℕ$} \\
+    \text{Values}       &      \pv & ∈ & \Val        & ::= & \highlight{\Lam{\px}{\pe}} \mid K~\many{\px}^{α_K} \\
+    \text{Expressions}  &      \pe & ∈ & \Exp        & ::= & \multicolumn{6}{l}{\highlight{\px \mid \pv \mid \pe~\px \mid \Let{\px}{\pe_1}{\pe_2}} \mid \Case{\pe}{\SelArity}}
+  \end{array}
+\]
+The language is in \emph{A-normal form}~\cite{Launchbury:93,Sestoft:97}, which means the arguments of applications
+are restricted to be variables.
+In A-normal form, the only difference between lazy and eager evaluation is the semantics of $\mathbf{let}$.
+Furthermore, we assume that all bound program variables are distinct \todo{explain what why we need this assumption. To simplify the presentation of the analysis?}.
+Note that we use overbars over lambdas in our analyzed lanaguage ($\overline{\lambda}$) to distinguish them from anonymous mathematical functions without a bar ($\lambda$).
+In this section only the highlighted parts are relevant, while the other parts will be used in following sections.
 
 \begin{figure}
-%\fboxsep=0pt\fbox{%
-\begin{minipage}{0.50\textwidth}
-\arraycolsep=0pt
-\abovedisplayskip=0pt
-\[\begin{array}{c}
- \begin{array}{rclcl}
-  a & {}∈{} & \Absence     & {}::={} & \aA \mid \aU \\
-  φ & {}∈{} & \Uses & {}={} & \Var \to \Absence \\
-  \varsigma & {}∈{} & \Summaries & {}::={} & \aA.. \mid a \sumcons \varsigma \mid \aU.. \\
-  θ & {}∈{} & \AbsTy & {}::={} & \langle φ, \varsigma \rangle \\
-  \\[-0.9em]
-  \multicolumn{5}{c}{\aA \sumcons \aA.. \equiv \aA.. \quad \aU \sumcons \aU.. \equiv \aU..} \\
- \end{array} \\
- \\[-0.5em]
- \begin{array}{l}
-  a * φ = \begin{cases} (\fn{\wild}{\aA}) & a = \aA \\ φ & a = \aU \\ \end{cases} \\
-  \mathit{fun}_{\px}( f) {}={} \langle φ[\px↦\aA], φ(\px) \sumcons \varsigma \rangle \\
-  \qquad\text{where } \langle φ, \varsigma \rangle = f(\langle [\px↦\aU], \aU.. \rangle) \\
-  \mathit{app}(\langle φ_f, a \sumcons \varsigma \rangle)(\langle φ_a, \wild \rangle) = \langle φ_f ⊔ (a * φ_a), \varsigma \rangle \\
- \end{array}
- \\[-0.5em]
-\end{array}\]
-\end{minipage}%
-%}%
-\quad
-%\fboxsep=0pt\fbox{%
-\begin{minipage}{0.47\textwidth}
-\arraycolsep=0pt
-\abovedisplayskip=0pt
-\[\begin{array}{rcl}
-  \multicolumn{3}{c}{ \ruleform{ \semabs{\wild}_{\wild} \colon \Exp → (\Var \pfun \AbsTy) → \AbsTy } } \\
+  %\fboxsep=0pt\fbox{%
+  \begin{minipage}[t]{0.47\textwidth}
+  \arraycolsep=0pt
+  \abovedisplayskip=0pt
+  \[\begin{array}{rcl}
+    \multicolumn{3}{c}{ \ruleform{ \semabs{\wild}_{\wild} \colon \Exp → \Env → \AbsTy } } \\
+    \\[-0.5em]
+    \semabs{\px}_ρ & {}={} & ρ(\px) \\
+    \semabs{\Lam{\px}{\pe}}_ρ & {}={} & \mathit{fun}_{\px}( \fn{θ}{\semabs{\pe}_{ρ[\px ↦ θ]}}) \\
+    \semabs{\pe~\px}_ρ & {}={} & \mathit{app}(\semabs{\pe}_{ρ})(ρ(\px)) \\
+    \semabs{\Letsmall{\px}{\pe_1}{\pe_2}}_ρ & {}={} & \semabs{\pe_2}_{ρ[\px ↦ θ]} \\
+    \text{where} \hspace{1.5em} θ &{}={}& \lfp(\fn{θ}{\px + \semabs{\pe_1}_{ρ[\px ↦ θ]}}) \\
+    \px + \langle φ, \varsigma \rangle & = & \langle φ[\px↦\aU], \varsigma \rangle
+    \\[-0.5em]
+  \end{array}\]
+  \end{minipage}%
+  %}%
+  \hfill
+  %\fboxsep=0pt\fbox{%
+  \begin{minipage}[t]{0.50\textwidth}
+  \arraycolsep=0pt
+  \abovedisplayskip=0pt
+  \[\begin{array}{c}
+  \begin{array}{rclcl}
+    \rho & {}∈{} & \Env & {}={} & \Var \rightharpoonup \AbsTy \\
+    θ & {}∈{} & \AbsTy & {}={} & \langle \Uses, \Summaries \rangle \\
+    φ & {}∈{} & \Uses & {}={} & \Var \to \Absence \\
+    a & {}∈{} & \Absence     & {}::={} & \aA \mid \aU \\
+    \varsigma & {}∈{} & \Summaries & {}::={} & \aA.. \mid a \sumcons \varsigma \mid \aU.. \\
+    \\[-0.9em]
+    \multicolumn{5}{c}{\aA \sumcons \aA.. \equiv \aA.. \quad \aU \sumcons \aU.. \equiv \aU..} \\
+  \end{array} \\
   \\[-0.5em]
-  \semabs{\px}_ρ & {}={} & ρ(\px) \\
-  \semabs{\Lam{\px}{\pe}}_ρ & {}={} & \mathit{fun}_{\px}( \fn{θ}{\semabs{\pe}_{ρ[\px ↦ θ]}}) \\
-  \semabs{\pe~\px}_ρ & {}={} & \mathit{app}(\semabs{\pe}_{ρ})(ρ(\px)) \\
-  \semabs{\Letsmall{\px}{\pe_1}{\pe_2}}_ρ & {}={} & \semabs{\pe_2}_{ρ[\px ↦ θ]} \\
-  \text{where} \hspace{1.5em} θ &{}={}& \lfp(\fn{θ}{\px + \semabs{\pe_1}_{ρ[\px ↦ θ]}}) \\
-  \px + \langle φ, \varsigma \rangle & = & \langle φ[\px↦\aU], \varsigma \rangle
+  \begin{array}{l}
+    a * φ = \begin{cases} (\fn{\wild}{\aA}) & a = \aA \\ φ & a = \aU \\ \end{cases} \\
+    \mathit{fun}_{\px}( f) {}={} \langle φ[\px↦\aA], φ(\px) \sumcons \varsigma \rangle \\
+    \qquad\text{where } \langle φ, \varsigma \rangle = f(\langle [\px↦\aU], \aU.. \rangle) \\
+    \mathit{app}(\langle φ_f, a \sumcons \varsigma \rangle)(\langle φ_a, \wild \rangle) = \langle φ_f ⊔ (a * φ_a), \varsigma \rangle \\
+  \end{array}
   \\[-0.5em]
-\end{array}\]
-\end{minipage}%
-%}%
-\caption{Absence analysis}
+  \end{array}\]
+  \end{minipage}%
+  %}%
+  \caption{Absence analysis}
   \label{fig:absence}
 \end{figure}
 
-Absence analysis for lazy programs is defined in \Cref{fig:absence}.
-We informally say that $\px$ is \emph{absent} in $\pe$ when $\px$ is never
-evaluated by $\pe$, no matter how deep we evaluate it.
-Otherwise, $\px$ is \emph{used} in $\pe$.
+The absence analysis is defined in \Cref{fig:absence} for a lazy program semantics.
+Analysis $\semabs{\pe}$ computes which variables are definitely not evaluated in expression $\pe$.
+These variables are called \emph{absent} ($\aA \in \Absence$).
+Furthermore, the analysis overapproximates which variables may potentially be evaluated.
+These variables are called \emph{used} ($\aU \in \Absence$).
+The analysis' return value $\langle \varphi, \varsigma \rangle$ is a tuple of usage information of variables $\varphi$ and a summary $\varsigma$.
+
+
+Additionally, analysis $\semabs{\pe}\rho$ takes an environment with absence information about the free variables of $\pe$ and returns an $\langle \varphi, \varsigma \rangle$.
+
+
+
 
 The idea for $\semabs{\pe}_ρ$ is to conservatively approximate which variables are
 absent ($\aA$) in $\pe$, rather than possibly used ($\aU$), given an environment
